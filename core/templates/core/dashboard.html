@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EPP Mock Server Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-full mx-auto py-8 px-4">
+        <h1 class="text-3xl font-bold mb-6 text-center">EPP Mock Server Dashboard</h1>
+        {% if message %}<div class="mb-4 p-3 bg-green-100 text-green-800 rounded">{{ message }}</div>{% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-2">Add Domain</h2>
+                <form method="post" class="space-y-2">{% csrf_token %}
+                    {{ domain_form.as_p }}
+                    <button type="submit" name="add_domain" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Domain</button>
+                </form>
+            </div>
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-2">Generate Random Domains</h2>
+                <form method="post" class="space-y-2">{% csrf_token %}
+                    {{ random_form.as_p }}
+                    <button type="submit" name="generate_domains" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Generate</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded shadow mb-8">
+            <h2 class="text-xl font-semibold mb-2">Add Competitor</h2>
+            <form method="post" class="space-y-2">{% csrf_token %}
+                {{ competitor_form.as_p }}
+                <button type="submit" name="add_competitor" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Add Competitor</button>
+            </form>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-lg font-semibold mb-2">Recent Domains</h2>
+                <table class="min-w-full text-sm">
+                    <thead><tr class="bg-gray-200"><th class="p-2">Name</th><th class="p-2">TLD</th><th class="p-2">Created</th></tr></thead>
+                    <tbody>
+                    {% for d in domains %}
+                    <tr><td class="p-2">{{ d.name }}</td><td class="p-2">{{ d.tld }}</td><td class="p-2">{{ d.created_at }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="p-2 text-gray-400">No domains yet.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-white p-6 rounded shadow overflow-x-auto">
+                <h2 class="text-lg font-semibold mb-2">Recent Drops</h2>
+                <div class="w-full overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-200">
+                                <th class="p-2">Domain</th>
+                                <th class="p-2">Drop Time</th>
+                                <th class="p-2">Created</th>
+                                <th class="p-2">Competitors</th>
+                                <th class="p-2">Edit Drop Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for drop in drops %}
+                        <tr>
+                            <td class="p-2">{{ drop.domain }}</td>
+                            <td class="p-2">{{ drop.drop_time }}</td>
+                            <td class="p-2">{{ drop.created_at }}</td>
+                            <td class="p-2">
+                                <table class="min-w-full text-xs bg-gray-50">
+                                    <thead>
+                                        <tr><th class="p-1">Name</th><th class="p-1">Attempts</th><th class="p-1">Delay (ms)</th><th class="p-1">Edit</th></tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for comp in drop.competitors.all %}
+                                    <tr>
+                                        <td class="p-1">{{ comp.name }}</td>
+                                        <td class="p-1">{{ comp.attempts }}</td>
+                                        <td class="p-1">
+                                            <form method="post" class="flex items-center space-x-1">{% csrf_token %}
+                                                <input type="hidden" name="competitor_id" value="{{ comp.id }}">
+                                                <input type="number" name="new_delay_ms" value="{{ comp.delay_ms }}" min="0" class="border rounded px-1 py-0.5 w-20">
+                                                <button type="submit" name="edit_competitor_delay" class="px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
+                                            </form>
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </td>
+                            <td class="p-2">
+                                <form method="post" class="flex items-center space-x-2">{% csrf_token %}
+                                    <input type="hidden" name="drop_id" value="{{ drop.id }}">
+                                    <input type="datetime-local" name="new_drop_time" value="{{ drop.drop_time|date:'Y-m-d\\TH:i' }}" class="border rounded px-2 py-1">
+                                    <button type="submit" name="edit_drop_time" class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">Update</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="p-2 text-gray-400">No drops yet.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded shadow mb-8">
+            <h2 class="text-lg font-semibold mb-2">Recent Competitors</h2>
+            <table class="min-w-full text-sm">
+                <thead><tr class="bg-gray-200"><th class="p-2">Name</th><th class="p-2">Drop</th><th class="p-2">Attempts</th><th class="p-2">Created</th></tr></thead>
+                <tbody>
+                {% for c in competitors %}
+                <tr><td class="p-2">{{ c.name }}</td><td class="p-2">{{ c.drop }}</td><td class="p-2">{{ c.attempts }}</td><td class="p-2">{{ c.created_at }}</td></tr>
+                {% empty %}<tr><td colspan="4" class="p-2 text-gray-400">No competitors yet.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
