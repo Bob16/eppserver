@@ -41,7 +41,7 @@
                     <thead><tr class="bg-gray-200"><th class="p-2">Name</th><th class="p-2">TLD</th><th class="p-2">Created</th></tr></thead>
                     <tbody>
                     {% for d in domains %}
-                    <tr><td class="p-2">{{ d.name }}</td><td class="p-2">{{ d.tld }}</td><td class="p-2">{{ d.created_at }}</td></tr>
+                    <tr><td class="p-2">{{ d.name }}</td><td class="p-2">{{ d.tld }}</td><td class="p-2">{{ d.created_at|date:"h:i:s A" }}</td></tr>
                     {% empty %}<tr><td colspan="3" class="p-2 text-gray-400">No domains yet.</td></tr>{% endfor %}
                     </tbody>
                 </table>
@@ -129,7 +129,7 @@
                 <thead><tr class="bg-gray-200"><th class="p-2">Name</th><th class="p-2">Drop</th><th class="p-2">Attempts</th><th class="p-2">Created</th></tr></thead>
                 <tbody>
                 {% for c in competitors %}
-                <tr><td class="p-2">{{ c.name }}</td><td class="p-2">{{ c.drop }}</td><td class="p-2">{{ c.attempts }}</td><td class="p-2">{{ c.created_at }}</td></tr>
+                <tr><td class="p-2">{{ c.name }}</td><td class="p-2">{{ c.drop }}</td><td class="p-2">{{ c.attempts }}</td><td class="p-2">{{ c.created_at|date:"h:i:s A" }}</td></tr>
                 {% empty %}<tr><td colspan="4" class="p-2 text-gray-400">No competitors yet.</td></tr>{% endfor %}
                 </tbody>
             </table>
