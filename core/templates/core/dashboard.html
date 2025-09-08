@@ -86,10 +86,29 @@
                                                         let rowClass = '';
                                                         if (drop.status === 'missed') rowClass = 'bg-red-100';
                                                         else if (drop.status === 'captured') rowClass = 'bg-green-100';
+                                                        let editForm = '<span class="text-gray-400">-</span>';
+                                                        if (drop.status === 'pending') {
+                                                            // Pre-fill the input with the current drop time in ISO format (yyyy-MM-ddTHH:mm:ss)
+                                                            // drop.drop_time is in 12-hour format (e.g., 03:15:22 PM), so we can't parse date directly
+                                                            // We'll use a custom attribute from the backend in the future, but for now, leave blank
+                                                            // Try to parse drop.drop_time and build a datetime-local string (assume today)
+                                                            // Instead, add a new field to the API: drop_time_iso (yyyy-MM-ddTHH:mm:ss)
+                                                            let valueAttr = '';
+                                                            if (drop.drop_time_iso) {
+                                                                valueAttr = `value="${drop.drop_time_iso}"`;
+                                                            }
+                                                            editForm = `
+                                                            <form method="post" style="display:inline;">
+                                                                <input type="hidden" name="csrfmiddlewaretoken" value="${window.csrf_token || ''}">
+                                                                <input type="hidden" name="drop_id" value="${drop.id}">
+                                                                <input type="datetime-local" name="new_drop_time" step="1" class="border rounded px-1 py-0.5 text-xs" required ${valueAttr}>
+                                                                <button type="submit" name="edit_drop_time" class="ml-1 px-2 py-0.5 bg-blue-600 text-white rounded text-xs">Update</button>
+                                                            </form>`;
+                                                        }
                                                         html += `<tr class="${rowClass}">
                                                             <td class="p-2">${drop.domain}</td>
-                                                              <td class="p-2">${drop.drop_time}</td>
-                                                              <td class="p-2">${drop.created_at}</td>
+                                                            <td class="p-2">${drop.drop_time}</td>
+                                                            <td class="p-2">${drop.created_at}</td>
                                                             <td class="p-2">${drop.status.charAt(0).toUpperCase() + drop.status.slice(1)}</td>
                                                             <td class="p-2">${drop.winner}</td>
                                                             <td class="p-2">
@@ -100,7 +119,7 @@
                                                                     </tbody>
                                                                 </table>
                                                             </td>
-                                                            <td class="p-2"><span class="text-gray-400">-</span></td>
+                                                            <td class="p-2">${editForm}</td>
                                                         </tr>`;
                                                     }
                                                     if (!drops.length) {
@@ -115,6 +134,11 @@
                                                         renderDrops(data.drops);
                                                     } catch (e) {}
                                                     setTimeout(pollDrops, 5000);
+                                                }
+                                                // Set CSRF token for JS forms
+                                                if (!window.csrf_token) {
+                                                    const csrfInput = document.querySelector('input[name=csrfmiddlewaretoken]');
+                                                    if (csrfInput) window.csrf_token = csrfInput.value;
                                                 }
                                                 pollDrops();
                                                 </script>

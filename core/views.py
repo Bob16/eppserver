@@ -38,26 +38,29 @@ def api_recent_drops(request):
     # Use BST (Europe/London with DST)
     tz = pytz.timezone("Europe/London")
     for drop in drops:
-            if drop.status == "captured" and drop.winner != my_name:
-                drop_status = "missed"
-            elif drop.status == "captured" and drop.winner == my_name:
-                drop_status = "captured"
-            else:
-                drop_status = drop.status
-            drop_time_bst = drop.drop_time.astimezone(tz)
-            created_at_bst = drop.created_at.astimezone(tz)
-            drop_list.append({
-                "id": drop.id,
-                "domain": str(drop.domain),
-                "drop_time": drop_time_bst.strftime("%I:%M:%S %p"),
-                "created_at": created_at_bst.strftime("%I:%M:%S %p"),
-                "status": drop_status,
-                "winner": drop.winner or "-",
-                "competitors": [
-                    {"name": c.name, "attempts": c.attempts, "delay_ms": c.delay_ms}
-                    for c in drop.competitors.all()
-                ]
-            })
+        if drop.status == "captured" and drop.winner != my_name:
+            drop_status = "missed"
+        elif drop.status == "captured" and drop.winner == my_name:
+            drop_status = "captured"
+        else:
+            drop_status = drop.status
+        drop_time_bst = drop.drop_time.astimezone(tz)
+        created_at_bst = drop.created_at.astimezone(tz)
+        # For datetime-local input: yyyy-MM-ddTHH:mm:ss
+        drop_time_iso = drop_time_bst.strftime("%Y-%m-%dT%H:%M:%S")
+        drop_list.append({
+            "id": drop.id,
+            "domain": str(drop.domain),
+            "drop_time": drop_time_bst.strftime("%I:%M:%S %p"),
+            "drop_time_iso": drop_time_iso,
+            "created_at": created_at_bst.strftime("%I:%M:%S %p"),
+            "status": drop_status,
+            "winner": drop.winner or "-",
+            "competitors": [
+                {"name": c.name, "attempts": c.attempts, "delay_ms": c.delay_ms}
+                for c in drop.competitors.all()
+            ]
+        })
     import json
     return HttpResponse(json.dumps({"drops": drop_list}), content_type="application/json")
 from django.http import JsonResponse, HttpResponse
