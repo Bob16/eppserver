@@ -11,10 +11,17 @@ class Domain(models.Model):
         return f"{self.name}.{self.tld}"
 
 class Drop(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("captured", "Captured"),
+        ("missed", "Missed"),
+    ]
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name='drops')
     drop_time = models.DateTimeField()
     clear_after_minutes = models.PositiveIntegerField(default=5)  # Minutes after drop to clear domain
     created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    winner = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"Drop for {self.domain} at {self.drop_time}"

@@ -46,25 +46,46 @@
                     </tbody>
                 </table>
             </div>
-            <div class="bg-white p-6 rounded shadow overflow-x-auto">
-                <h2 class="text-lg font-semibold mb-2">Recent Drops</h2>
+                        <div class="bg-white p-6 rounded shadow overflow-x-auto">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h2 class="text-lg font-semibold">Recent Drops</h2>
+                                    <form method="post" class="inline-block">{% csrf_token %}
+                                        <button type="submit" name="remove_missed_drops" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Remove Missed</button>
+                                    </form>
+                                </div>
                 <div class="w-full overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
                             <tr class="bg-gray-200">
-                                <th class="p-2">Domain</th>
-                                <th class="p-2">Drop Time</th>
-                                <th class="p-2">Created</th>
+                                                                <th class="p-2">Domain</th>
+                                                                                                <th class="p-2">
+                                                                                                    <a href="?sort=drop_time&order={% if request.GET.sort == 'drop_time' and request.GET.order == 'asc' %}desc{% else %}asc{% endif %}" class="underline">Drop Time</a>
+                                                                                                    {% if request.GET.sort == 'drop_time' %}
+                                                                                                        {% if request.GET.order == 'asc' %}↑{% else %}↓{% endif %}
+                                                                                                    {% endif %}
+                                                                                                </th>
+                                                                                                <th class="p-2">
+                                                                                                    <a href="?sort=created_at&order={% if request.GET.sort == 'created_at' and request.GET.order == 'asc' %}desc{% else %}asc{% endif %}" class="underline">Created</a>
+                                                                                                    {% if request.GET.sort == 'created_at' %}
+                                                                                                        {% if request.GET.order == 'asc' %}↑{% else %}↓{% endif %}
+                                                                                                    {% endif %}
+                                                                                                </th>
+                                <th class="p-2">Status</th>
+                                <th class="p-2">Winner</th>
                                 <th class="p-2">Competitors</th>
                                 <th class="p-2">Edit Drop Time</th>
                             </tr>
                         </thead>
                         <tbody>
                         {% for drop in drops %}
-                        <tr>
-                            <td class="p-2">{{ drop.domain }}</td>
-                            <td class="p-2">{{ drop.drop_time }}</td>
-                            <td class="p-2">{{ drop.created_at }}</td>
+                                                <tr {% if drop.display_status == 'missed' %}class="bg-red-100"{% elif drop.display_status == 'captured' %}class="bg-green-100"{% endif %}>
+                                                        <td class="p-2">{{ drop.domain }}</td>
+                                                        <td class="p-2">{{ drop.drop_time }}</td>
+                                                        <td class="p-2">{{ drop.created_at }}</td>
+                                                        <td class="p-2">
+                                                            {% if drop.display_status == 'captured' %}Captured{% elif drop.display_status == 'missed' %}Missed{% else %}Pending{% endif %}
+                                                        </td>
+                                                        <td class="p-2">{{ drop.winner|default:'-' }}</td>
                             <td class="p-2">
                                 <table class="min-w-full text-xs bg-gray-50">
                                     <thead>
@@ -75,25 +96,33 @@
                                     <tr>
                                         <td class="p-1">{{ comp.name }}</td>
                                         <td class="p-1">{{ comp.attempts }}</td>
+                                        <td class="p-1">{{ comp.delay_ms }}</td>
                                         <td class="p-1">
+                                            {% if drop.status == 'pending' %}
                                             <form method="post" class="flex items-center space-x-1">{% csrf_token %}
                                                 <input type="hidden" name="competitor_id" value="{{ comp.id }}">
                                                 <input type="number" name="new_delay_ms" value="{{ comp.delay_ms }}" min="0" class="border rounded px-1 py-0.5 w-20">
                                                 <button type="submit" name="edit_competitor_delay" class="px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
                                             </form>
+                                            {% else %}
+                                            <span class="text-gray-400">-</span>
+                                            {% endif %}
                                         </td>
-                                        <td></td>
                                     </tr>
                                     {% endfor %}
                                     </tbody>
                                 </table>
                             </td>
                             <td class="p-2">
+                                {% if drop.status == 'pending' %}
                                 <form method="post" class="flex items-center space-x-2">{% csrf_token %}
                                     <input type="hidden" name="drop_id" value="{{ drop.id }}">
                                     <input type="datetime-local" name="new_drop_time" value="{{ drop.drop_time|date:'Y-m-d\\TH:i' }}" class="border rounded px-2 py-1">
                                     <button type="submit" name="edit_drop_time" class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">Update</button>
                                 </form>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% empty %}

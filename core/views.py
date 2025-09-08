@@ -1,9 +1,98 @@
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+import os
+# ...existing code...
+
+# API endpoint for external capture requests
+@csrf_exempt
+def api_capture(request):
+        if request.method != "POST":
+                return HttpResponse("""
+<epp>
+    <response>
+        <result code="2001">
+            <msg>POST required</msg>
+        </result>
+    </response>
+</epp>
+""", content_type="application/xml", status=405)
+        api_token = os.environ.get("DOMAIN_CAPTURE_API_TOKEN")
+        auth = request.headers.get("Authorization", "").replace("Token ", "")
+        if not api_token or auth != api_token:
+                return HttpResponse("""
+<epp>
+    <response>
+        <result code="2200">
+            <msg>Unauthorized</msg>
+        </result>
+    </response>
+</epp>
+""", content_type="application/xml", status=401)
+        from xml.etree import ElementTree as ET
+        try:
+                xml = ET.fromstring(request.body.decode())
+                command = xml.find("command")
+                if command is None:
+                        raise Exception("Missing <command>")
+                capture = command.find("capture")
+                if capture is None:
+                        raise Exception("Missing <capture>")
+                drop_id = int(capture.findtext("drop:id"))
+                name = capture.findtext("drop:name")
+                attempts = int(capture.findtext("drop:attempts") or 1)
+                delay_ms = int(capture.findtext("drop:delay_ms") or 100)
+        except Exception as e:
+                return HttpResponse(f"""
+<epp>
+    <response>
+        <result code="2002">
+            <msg>Invalid input: {e}</msg>
+        </result>
+    </response>
+</epp>
+""", content_type="application/xml", status=400)
+        try:
+                drop = Drop.objects.get(id=drop_id)
+                if drop.status != "pending":
+                        return HttpResponse("""
+<epp>
+    <response>
+        <result code="2304">
+            <msg>Drop is not pending.</msg>
+        </result>
+    </response>
+</epp>
+""", content_type="application/xml", status=400)
+                comp = Competitor.objects.create(drop=drop, name=name, attempts=attempts, delay_ms=delay_ms)
+                return HttpResponse(f"""
+<epp>
+    <response>
+        <result code="1000">
+            <msg>Command completed successfully</msg>
+        </result>
+        <resData>
+            <drop:competitor_id>{comp.id}</drop:competitor_id>
+        </resData>
+    </response>
+</epp>
+""", content_type="application/xml")
+        except Drop.DoesNotExist:
+                return HttpResponse("""
+<epp>
+    <response>
+        <result code="2303">
+            <msg>Drop not found.</msg>
+        </result>
+    </response>
+</epp>
+""", content_type="application/xml", status=404)
 from django.shortcuts import render, redirect
 from django import forms
 from .models import Domain, Drop, Competitor
 from django.db.models import F
 
 from django.utils import timezone
+from django.db import transaction
 from django.contrib.auth.decorators import login_required
 import random
 
@@ -32,23 +121,58 @@ def dashboard(request):
     competitor_form = CompetitorForm()
     message = None
 
+    # --- Automatic capture logic ---
+    now = timezone.now()
+    my_name = request.user.username if request.user.is_authenticated else None
+    with transaction.atomic():
+        for drop in Drop.objects.select_for_update().filter(status="pending", drop_time__lte=now):
+            competitors = list(drop.competitors.all())
+            if competitors:
+                winner = min(competitors, key=lambda c: c.delay_ms)
+                drop.status = "captured"
+                drop.winner = winner.name
+            else:
+                drop.status = "missed"
+                drop.winner = None
+            drop.save()
+
+    # Sorting logic for drops
+    sort = request.GET.get("sort", "drop_time")
+    order = request.GET.get("order", "asc")
+    if sort not in ("drop_time", "created_at"): sort = "drop_time"
+    if order not in ("asc", "desc"): order = "asc"
+    sort_prefix = "" if order == "asc" else "-"
+    drops = list(Drop.objects.order_by(f"{sort_prefix}{sort}")[:20])
+    for drop in drops:
+        if drop.status == "captured" and drop.winner != my_name:
+            drop.status = "missed"
+            drop.save(update_fields=["status"])
+            drop.display_status = "missed"
+        elif drop.status == "captured" and drop.winner == my_name:
+            drop.display_status = "captured"
+        else:
+            drop.display_status = drop.status
+
     if request.method == "POST":
-        if "add_domain" in request.POST:
+        if "remove_missed_drops" in request.POST:
+            removed_count, _ = Drop.objects.filter(status="missed").delete()
+            message = f"Removed {removed_count} missed drops."
+        elif "add_domain" in request.POST:
             domain_form = DomainForm(request.POST)
             if domain_form.is_valid():
                 domain = domain_form.save()
-                # Set drop_time to 2 minutes after the latest drop or now
                 last_drop = Drop.objects.order_by('-drop_time').first()
                 base_time = last_drop.drop_time if last_drop else timezone.now()
                 drop_time = base_time + timezone.timedelta(minutes=2)
                 Drop.objects.create(domain=domain, drop_time=drop_time)
                 message = "Domain added and ready for catch."
+            # Refresh drops list after add
+            drops = list(Drop.objects.order_by("-created_at")[:20])
         elif "generate_domains" in request.POST:
             random_form = RandomDomainForm(request.POST)
             if random_form.is_valid():
                 count = random_form.cleaned_data["count"]
                 clear_after = random_form.cleaned_data["clear_after_minutes"]
-                # Find the latest drop_time or now
                 last_drop = Drop.objects.order_by('-drop_time').first()
                 base_time = last_drop.drop_time if last_drop else timezone.now()
                 for i in range(count):
@@ -58,21 +182,25 @@ def dashboard(request):
                     drop_time = base_time + timezone.timedelta(minutes=2 * (i + 1))
                     Drop.objects.create(domain=domain, drop_time=drop_time, clear_after_minutes=clear_after)
                 message = f"{count} random domains generated and ready for catch."
+            # Refresh drops list after generate
+            drops = list(Drop.objects.order_by("-created_at")[:20])
         elif "edit_drop_time" in request.POST:
             drop_id = request.POST.get('drop_id')
             new_time = request.POST.get('new_drop_time')
             if drop_id and new_time:
                 try:
                     drop = Drop.objects.get(id=drop_id)
-                    # Parse the new time as an aware datetime
-                    from django.utils.dateparse import parse_datetime
-                    parsed_time = parse_datetime(new_time)
-                    if parsed_time:
-                        drop.drop_time = parsed_time
-                        drop.save()
-                        message = "Drop time updated."
+                    if drop.status != "pending":
+                        message = "Cannot edit drop time for captured/missed drops."
                     else:
-                        message = "Invalid date/time format."
+                        from django.utils.dateparse import parse_datetime
+                        parsed_time = parse_datetime(new_time)
+                        if parsed_time:
+                            drop.drop_time = parsed_time
+                            drop.save()
+                            message = "Drop time updated."
+                        else:
+                            message = "Invalid date/time format."
                 except Drop.DoesNotExist:
                     message = "Drop not found."
         elif "edit_competitor_delay" in request.POST:
@@ -81,25 +209,28 @@ def dashboard(request):
             if competitor_id and new_delay is not None:
                 try:
                     comp = Competitor.objects.get(id=competitor_id)
-                    comp.delay_ms = int(new_delay)
-                    comp.save()
-                    message = f"Delay updated for {comp.name}."
+                    if comp.drop.status != "pending":
+                        message = "Cannot edit competitor for captured/missed drops."
+                    else:
+                        comp.delay_ms = int(new_delay)
+                        comp.save()
+                        message = f"Delay updated for {comp.name}."
                 except Competitor.DoesNotExist:
                     message = "Competitor not found."
         elif "add_competitor" in request.POST:
             competitor_form = CompetitorForm(request.POST)
             if competitor_form.is_valid():
                 drop = competitor_form.cleaned_data["drop"]
-                name = competitor_form.cleaned_data["name"]
-                attempts = competitor_form.cleaned_data["attempts"]
-                Competitor.objects.create(drop=drop, name=name, attempts=attempts)
-                message = "Competitor added."
+                if drop.status != "pending":
+                    message = "Cannot add competitor to captured/missed drops."
+                else:
+                    name = competitor_form.cleaned_data["name"]
+                    attempts = competitor_form.cleaned_data["attempts"]
+                    Competitor.objects.create(drop=drop, name=name, attempts=attempts)
+                    message = "Competitor added."
 
     domains = Domain.objects.all().order_by("-created_at")[:20]
-    now = timezone.now()
-    drops = Drop.objects.filter(
-        drop_time__gt=now - F('clear_after_minutes') * 60
-    ).order_by("-created_at")[:20]
+    # drops already set above
     competitors = Competitor.objects.all().order_by("-created_at")[:20]
 
     return render(request, "core/dashboard.html", {
