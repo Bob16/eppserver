@@ -76,59 +76,48 @@
                                 <th class="p-2">Edit Drop Time</th>
                             </tr>
                         </thead>
-                        <tbody>
-                        {% for drop in drops %}
-                                                <tr {% if drop.display_status == 'missed' %}class="bg-red-100"{% elif drop.display_status == 'captured' %}class="bg-green-100"{% endif %}>
-                                                        <td class="p-2">{{ drop.domain }}</td>
-                                                        <td class="p-2">{{ drop.drop_time }}</td>
-                                                        <td class="p-2">{{ drop.created_at }}</td>
-                                                        <td class="p-2">
-                                                            {% if drop.display_status == 'captured' %}Captured{% elif drop.display_status == 'missed' %}Missed{% else %}Pending{% endif %}
-                                                        </td>
-                                                        <td class="p-2">{{ drop.winner|default:'-' }}</td>
-                            <td class="p-2">
-                                <table class="min-w-full text-xs bg-gray-50">
-                                    <thead>
-                                        <tr><th class="p-1">Name</th><th class="p-1">Attempts</th><th class="p-1">Delay (ms)</th><th class="p-1">Edit</th></tr>
-                                    </thead>
-                                    <tbody>
-                                    {% for comp in drop.competitors.all %}
-                                    <tr>
-                                        <td class="p-1">{{ comp.name }}</td>
-                                        <td class="p-1">{{ comp.attempts }}</td>
-                                        <td class="p-1">{{ comp.delay_ms }}</td>
-                                        <td class="p-1">
-                                            {% if drop.status == 'pending' %}
-                                            <form method="post" class="flex items-center space-x-1">{% csrf_token %}
-                                                <input type="hidden" name="competitor_id" value="{{ comp.id }}">
-                                                <input type="number" name="new_delay_ms" value="{{ comp.delay_ms }}" min="0" class="border rounded px-1 py-0.5 w-20">
-                                                <button type="submit" name="edit_competitor_delay" class="px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
-                                            </form>
-                                            {% else %}
-                                            <span class="text-gray-400">-</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                            </td>
-                            <td class="p-2">
-                                {% if drop.status == 'pending' %}
-                                <form method="post" class="flex items-center space-x-2">{% csrf_token %}
-                                    <input type="hidden" name="drop_id" value="{{ drop.id }}">
-                                    <input type="datetime-local" name="new_drop_time" value="{{ drop.drop_time|date:'Y-m-d\\TH:i' }}" class="border rounded px-2 py-1">
-                                    <button type="submit" name="edit_drop_time" class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">Update</button>
-                                </form>
-                                {% else %}
-                                <span class="text-gray-400">-</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="p-2 text-gray-400">No drops yet.</td></tr>
-                        {% endfor %}
-                        </tbody>
+                                                <tbody id="recent-drops-tbody">
+                                                <!-- Will be filled by JS -->
+                                                </tbody>
+                                                <script>
+                                                function renderDrops(drops) {
+                                                    let html = '';
+                                                    for (const drop of drops) {
+                                                        let rowClass = '';
+                                                        if (drop.status === 'missed') rowClass = 'bg-red-100';
+                                                        else if (drop.status === 'captured') rowClass = 'bg-green-100';
+                                                        html += `<tr class="${rowClass}">
+                                                            <td class="p-2">${drop.domain}</td>
+                                                              <td class="p-2">${drop.drop_time}</td>
+                                                              <td class="p-2">${drop.created_at}</td>
+                                                            <td class="p-2">${drop.status.charAt(0).toUpperCase() + drop.status.slice(1)}</td>
+                                                            <td class="p-2">${drop.winner}</td>
+                                                            <td class="p-2">
+                                                                <table class="min-w-full text-xs bg-gray-50">
+                                                                    <thead><tr><th class="p-1">Name</th><th class="p-1">Attempts</th><th class="p-1">Delay (ms)</th></tr></thead>
+                                                                    <tbody>
+                                                                        ${drop.competitors.map(c => `<tr><td class="p-1">${c.name}</td><td class="p-1">${c.attempts}</td><td class="p-1">${c.delay_ms}</td></tr>`).join('')}
+                                                                    </tbody>
+                                                                </table>
+                                                            </td>
+                                                            <td class="p-2"><span class="text-gray-400">-</span></td>
+                                                        </tr>`;
+                                                    }
+                                                    if (!drops.length) {
+                                                        html = '<tr><td colspan="7" class="p-2 text-gray-400">No drops yet.</td></tr>';
+                                                    }
+                                                    document.getElementById('recent-drops-tbody').innerHTML = html;
+                                                }
+                                                async function pollDrops() {
+                                                    try {
+                                                        const resp = await fetch('/api/recent-drops/');
+                                                        const data = await resp.json();
+                                                        renderDrops(data.drops);
+                                                    } catch (e) {}
+                                                    setTimeout(pollDrops, 5000);
+                                                }
+                                                pollDrops();
+                                                </script>
                     </table>
                 </div>
             </div>

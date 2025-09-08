@@ -1,3 +1,65 @@
+from django.core.serializers.json import DjangoJSONEncoder
+from django.utils.timesince import timesince
+# API endpoint for recent drops (JSON)
+from django.contrib.auth.decorators import login_required as _login_required
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_GET
+@require_GET
+@_login_required
+def api_recent_drops(request):
+    # --- Automatic capture logic (same as dashboard) ---
+    from django.utils import timezone
+    from django.db import transaction
+    now = timezone.now()
+    with transaction.atomic():
+        for drop in Drop.objects.select_for_update().filter(status="pending", drop_time__lte=now):
+            competitors = list(drop.competitors.all())
+            if competitors:
+                winner = min(competitors, key=lambda c: c.delay_ms)
+                drop.status = "captured"
+                drop.winner = winner.name
+                drop.save()
+            else:
+                clear_time = drop.drop_time + timezone.timedelta(minutes=drop.clear_after_minutes)
+                if now >= clear_time:
+                    drop.status = "missed"
+                    drop.winner = None
+                    drop.save()
+    sort = request.GET.get("sort", "drop_time")
+    order = request.GET.get("order", "asc")
+    if sort not in ("drop_time", "created_at"): sort = "drop_time"
+    if order not in ("asc", "desc"): order = "asc"
+    sort_prefix = "" if order == "asc" else "-"
+    drops = Drop.objects.order_by(f"{sort_prefix}{sort}")[:20]
+    my_name = request.user.username if request.user.is_authenticated else None
+    drop_list = []
+    import pytz
+    from django.conf import settings
+    # Use BST (Europe/London with DST)
+    tz = pytz.timezone("Europe/London")
+    for drop in drops:
+            if drop.status == "captured" and drop.winner != my_name:
+                drop_status = "missed"
+            elif drop.status == "captured" and drop.winner == my_name:
+                drop_status = "captured"
+            else:
+                drop_status = drop.status
+            drop_time_bst = drop.drop_time.astimezone(tz)
+            created_at_bst = drop.created_at.astimezone(tz)
+            drop_list.append({
+                "id": drop.id,
+                "domain": str(drop.domain),
+                "drop_time": drop_time_bst.strftime("%I:%M:%S %p"),
+                "created_at": created_at_bst.strftime("%I:%M:%S %p"),
+                "status": drop_status,
+                "winner": drop.winner or "-",
+                "competitors": [
+                    {"name": c.name, "attempts": c.attempts, "delay_ms": c.delay_ms}
+                    for c in drop.competitors.all()
+                ]
+            })
+    import json
+    return HttpResponse(json.dumps({"drops": drop_list}), content_type="application/json")
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 import os
