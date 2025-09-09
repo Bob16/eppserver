@@ -114,7 +114,7 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml", status=405)
-    api_token = os.environ.get("DOMAIN_CAPTURE_API_TOKEN")
+    api_token = os.environ.get("API_TOKEN")
     auth = request.headers.get("Authorization", "").replace("Token ", "")
     if not api_token or auth != api_token:
                 return HttpResponse("""
@@ -128,17 +128,35 @@ def api_capture(request):
 """, content_type="application/xml", status=401)
     from xml.etree import ElementTree as ET
     try:
-                xml = ET.fromstring(request.body.decode())
-                command = xml.find("command")
-                if command is None:
-                        raise Exception("Missing <command>")
-                capture = command.find("capture")
-                if capture is None:
-                        raise Exception("Missing <capture>")
-                drop_id = int(capture.findtext("drop:id"))
-                name = capture.findtext("drop:name")
-                attempts = int(capture.findtext("drop:attempts") or 1)
-                delay_ms = int(capture.findtext("drop:delay_ms") or 100)
+        xml = ET.fromstring(request.body.decode())
+        command = xml.find("command")
+        if command is None:
+            raise Exception("Missing <command>")
+        capture = command.find("capture")
+        if capture is None:
+            raise Exception("Missing <capture>")
+        drop_id_text = capture.findtext("drop:id")
+        domain_name = capture.findtext("drop:name")
+        attempts = int(capture.findtext("drop:attempts") or 1)
+        delay_ms = int(capture.findtext("drop:delay_ms") or 100)
+        # If drop_id is missing or empty, try to look up by domain name
+        if drop_id_text and drop_id_text.strip():
+            drop_id = int(drop_id_text)
+        elif domain_name and domain_name.strip():
+            # Match on full domain name (e.g., domain80704.com)
+            from .models import Drop, Domain
+            try:
+                domain_obj = Domain.objects.get(name=domain_name)
+            except Domain.DoesNotExist:
+                raise Exception(f"Domain not found: {domain_name}")
+            try:
+                drop = Drop.objects.get(domain=domain_obj, status="pending")
+                drop_id = drop.id
+            except Drop.DoesNotExist:
+                raise Exception(f"No pending drop for domain: {domain_name}")
+        else:
+            raise Exception("Missing <drop:id> and <drop:name>")
+        name = domain_name  # For competitor name, you may want to use a different field if needed
     except Exception as e:
                 return HttpResponse(f"""
 <epp>
