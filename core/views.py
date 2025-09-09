@@ -1,3 +1,34 @@
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+import json
+
+# Simple JSON API for adding a competitor externally
+@csrf_exempt
+@require_POST
+def api_add_competitor(request):
+    api_token = os.environ.get("DOMAIN_CAPTURE_API_TOKEN")
+    auth = request.headers.get("Authorization", "").replace("Token ", "")
+    if not api_token or auth != api_token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        data = json.loads(request.body.decode())
+        drop_id = int(data.get("drop_id"))
+        name = data.get("name")
+        attempts = int(data.get("attempts", 1))
+        delay_ms = int(data.get("delay_ms", 100))
+        if not drop_id or not name:
+            raise ValueError("Missing drop_id or name")
+    except Exception as e:
+        return JsonResponse({"error": f"Invalid input: {e}"}, status=400)
+    try:
+        drop = Drop.objects.get(id=drop_id)
+        if drop.status != "pending":
+            return JsonResponse({"error": "Drop is not pending."}, status=400)
+        comp = Competitor.objects.create(drop=drop, name=name, attempts=attempts, delay_ms=delay_ms)
+        # Optionally trigger the drop logic here if needed
+        return JsonResponse({"result": "success", "competitor_id": comp.id})
+    except Drop.DoesNotExist:
+        return JsonResponse({"error": "Drop not found."}, status=404)
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils.timesince import timesince
 # API endpoint for recent drops (JSON)
@@ -71,7 +102,9 @@ import os
 # API endpoint for external capture requests
 @csrf_exempt
 def api_capture(request):
-        if request.method != "POST":
+    import logging
+    logging.info("Received a request at /api/capture/ from %s", request.META.get('REMOTE_ADDR'))
+    if request.method != "POST":
                 return HttpResponse("""
 <epp>
     <response>
@@ -81,9 +114,9 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml", status=405)
-        api_token = os.environ.get("DOMAIN_CAPTURE_API_TOKEN")
-        auth = request.headers.get("Authorization", "").replace("Token ", "")
-        if not api_token or auth != api_token:
+    api_token = os.environ.get("DOMAIN_CAPTURE_API_TOKEN")
+    auth = request.headers.get("Authorization", "").replace("Token ", "")
+    if not api_token or auth != api_token:
                 return HttpResponse("""
 <epp>
     <response>
@@ -93,8 +126,8 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml", status=401)
-        from xml.etree import ElementTree as ET
-        try:
+    from xml.etree import ElementTree as ET
+    try:
                 xml = ET.fromstring(request.body.decode())
                 command = xml.find("command")
                 if command is None:
@@ -106,7 +139,7 @@ def api_capture(request):
                 name = capture.findtext("drop:name")
                 attempts = int(capture.findtext("drop:attempts") or 1)
                 delay_ms = int(capture.findtext("drop:delay_ms") or 100)
-        except Exception as e:
+    except Exception as e:
                 return HttpResponse(f"""
 <epp>
     <response>
@@ -116,7 +149,7 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml", status=400)
-        try:
+    try:
                 drop = Drop.objects.get(id=drop_id)
                 if drop.status != "pending":
                         return HttpResponse("""
@@ -141,7 +174,7 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml")
-        except Drop.DoesNotExist:
+    except Drop.DoesNotExist:
                 return HttpResponse("""
 <epp>
     <response>
