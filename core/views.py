@@ -129,18 +129,21 @@ def api_capture(request):
     from xml.etree import ElementTree as ET
     try:
         xml = ET.fromstring(request.body.decode())
+        ns = {'drop': 'urn:drop'}
         command = xml.find("command")
         if command is None:
             raise Exception("Missing <command>")
         capture = command.find("capture")
         if capture is None:
             raise Exception("Missing <capture>")
-        domain_name = capture.findtext("drop:name")
-        attempts = int(capture.findtext("drop:attempts") or 1)
-        delay_ms = int(capture.findtext("drop:delay_ms") or 100)
+        domain_name = capture.findtext("drop:name", namespaces=ns)
+        attempts = capture.findtext("drop:attempts", namespaces=ns)
+        delay_ms = capture.findtext("drop:delay_ms", namespaces=ns)
         if not domain_name or not domain_name.strip():
             raise Exception("Missing <drop:name>")
-        from .models import Drop, Domain
+        attempts = int(attempts) if attempts and attempts.isdigit() else 1
+        delay_ms = int(delay_ms) if delay_ms and delay_ms.isdigit() else 100
+        from .models import Drop, Domain, Competitor
         try:
             domain_obj = Domain.objects.get(name=domain_name)
         except Domain.DoesNotExist:
@@ -151,7 +154,7 @@ def api_capture(request):
             raise Exception(f"No pending drop for domain: {domain_name}")
         name = domain_name  # For competitor name, you may want to use a different field if needed
     except Exception as e:
-                return HttpResponse(f"""
+        return HttpResponse(f"""
 <epp>
     <response>
         <result code="2002">
@@ -161,9 +164,8 @@ def api_capture(request):
 </epp>
 """, content_type="application/xml", status=400)
     try:
-                drop = Drop.objects.get(id=drop_id)
-                if drop.status != "pending":
-                        return HttpResponse("""
+        if drop.status != "pending":
+            return HttpResponse("""
 <epp>
     <response>
         <result code="2304">
@@ -172,8 +174,8 @@ def api_capture(request):
     </response>
 </epp>
 """, content_type="application/xml", status=400)
-                comp = Competitor.objects.create(drop=drop, name=name, attempts=attempts, delay_ms=delay_ms)
-                return HttpResponse(f"""
+        comp = Competitor.objects.create(drop=drop, name=name, attempts=attempts, delay_ms=delay_ms)
+        return HttpResponse(f"""
 <epp>
     <response>
         <result code="1000">
@@ -186,7 +188,7 @@ def api_capture(request):
 </epp>
 """, content_type="application/xml")
     except Drop.DoesNotExist:
-                return HttpResponse("""
+        return HttpResponse("""
 <epp>
     <response>
         <result code="2303">
