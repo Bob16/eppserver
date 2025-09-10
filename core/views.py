@@ -144,8 +144,12 @@ def api_capture(request):
         attempts = int(attempts) if attempts and attempts.isdigit() else 1
         delay_ms = int(delay_ms) if delay_ms and delay_ms.isdigit() else 100
         from .models import Drop, Competitor
+        # Split domain_name into name and tld
+        if '.' not in domain_name:
+            raise Exception("Invalid domain format")
+        name_part, tld_part = domain_name.rsplit('.', 1)
         try:
-            drop = Drop.objects.get(domain__name=domain_name, status="pending")
+            drop = Drop.objects.get(domain__name=name_part, domain__tld=tld_part, status="pending")
         except Drop.DoesNotExist:
             raise Exception(f"No pending drop for domain: {domain_name}")
         name = domain_name  # For competitor name, you may want to use a different field if needed
