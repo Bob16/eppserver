@@ -105,8 +105,8 @@ def api_capture(request):
     import logging
     logging.info("Received a request at /api/capture/ from %s", request.META.get('REMOTE_ADDR'))
     if request.method != "POST":
-                return HttpResponse("""
-<epp>
+        return HttpResponse("""
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="2001">
             <msg>POST required</msg>
@@ -117,8 +117,8 @@ def api_capture(request):
     api_token = os.environ.get("API_TOKEN")
     auth = request.headers.get("Authorization", "").replace("Token ", "")
     if not api_token or auth != api_token:
-                return HttpResponse("""
-<epp>
+        return HttpResponse("""
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="2200">
             <msg>Unauthorized</msg>
@@ -155,7 +155,7 @@ def api_capture(request):
         name = domain_name  # For competitor name, you may want to use a different field if needed
     except Exception as e:
         return HttpResponse(f"""
-<epp>
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="2002">
             <msg>Invalid input: {e}</msg>
@@ -166,7 +166,7 @@ def api_capture(request):
     try:
         if drop.status != "pending":
             return HttpResponse("""
-<epp>
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="2304">
             <msg>Drop is not pending.</msg>
@@ -176,7 +176,7 @@ def api_capture(request):
 """, content_type="application/xml", status=400)
         comp = Competitor.objects.create(drop=drop, name=name, attempts=attempts, delay_ms=delay_ms)
         return HttpResponse(f"""
-<epp>
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="1000">
             <msg>Command completed successfully</msg>
@@ -189,7 +189,7 @@ def api_capture(request):
 """, content_type="application/xml")
     except Drop.DoesNotExist:
         return HttpResponse("""
-<epp>
+<epp xmlns:drop="urn:drop">
     <response>
         <result code="2303">
             <msg>Drop not found.</msg>
