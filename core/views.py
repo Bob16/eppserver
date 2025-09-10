@@ -143,13 +143,9 @@ def api_capture(request):
             raise Exception("Missing <drop:name>")
         attempts = int(attempts) if attempts and attempts.isdigit() else 1
         delay_ms = int(delay_ms) if delay_ms and delay_ms.isdigit() else 100
-        from .models import Drop, Domain, Competitor
+        from .models import Drop, Competitor
         try:
-            domain_obj = Domain.objects.get(name=domain_name)
-        except Domain.DoesNotExist:
-            raise Exception(f"Domain not found: {domain_name}")
-        try:
-            drop = Drop.objects.get(domain=domain_obj, status="pending")
+            drop = Drop.objects.get(domain__name=domain_name, status="pending")
         except Drop.DoesNotExist:
             raise Exception(f"No pending drop for domain: {domain_name}")
         name = domain_name  # For competitor name, you may want to use a different field if needed
