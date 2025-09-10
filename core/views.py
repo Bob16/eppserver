@@ -135,27 +135,20 @@ def api_capture(request):
         capture = command.find("capture")
         if capture is None:
             raise Exception("Missing <capture>")
-        drop_id_text = capture.findtext("drop:id")
         domain_name = capture.findtext("drop:name")
         attempts = int(capture.findtext("drop:attempts") or 1)
         delay_ms = int(capture.findtext("drop:delay_ms") or 100)
-        # If drop_id is missing or empty, try to look up by domain name
-        if drop_id_text and drop_id_text.strip():
-            drop_id = int(drop_id_text)
-        elif domain_name and domain_name.strip():
-            # Match on full domain name (e.g., domain80704.com)
-            from .models import Drop, Domain
-            try:
-                domain_obj = Domain.objects.get(name=domain_name)
-            except Domain.DoesNotExist:
-                raise Exception(f"Domain not found: {domain_name}")
-            try:
-                drop = Drop.objects.get(domain=domain_obj, status="pending")
-                drop_id = drop.id
-            except Drop.DoesNotExist:
-                raise Exception(f"No pending drop for domain: {domain_name}")
-        else:
-            raise Exception("Missing <drop:id> and <drop:name>")
+        if not domain_name or not domain_name.strip():
+            raise Exception("Missing <drop:name>")
+        from .models import Drop, Domain
+        try:
+            domain_obj = Domain.objects.get(name=domain_name)
+        except Domain.DoesNotExist:
+            raise Exception(f"Domain not found: {domain_name}")
+        try:
+            drop = Drop.objects.get(domain=domain_obj, status="pending")
+        except Drop.DoesNotExist:
+            raise Exception(f"No pending drop for domain: {domain_name}")
         name = domain_name  # For competitor name, you may want to use a different field if needed
     except Exception as e:
                 return HttpResponse(f"""
